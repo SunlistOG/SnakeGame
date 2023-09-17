@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Snake!</title>
+    <link rel="icon" href="" type="image/x-icon">
+
+</head>
+
+<body>
+
+    <div id="instructions">
+        Use arrow keys (Up, Down, Left, Right) to control the snake's direction.
+        Press '+' to increase speed and '-' to decrease speed.
+        Click the "Start/Restart" button to begin.
+    </div>
+
+    <canvas id="canvas" width="500" height="500"></canvas>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.js"
+        integrity="sha256-JlqSTELeR4TLqP0OG9dxM7yDPqX1ox/HfgiSLBj8+kM=" crossorigin="anonymous"></script>
+
+    <script>
+        // setup canvas
+        const canvas = document.getElementById("canvas")
+        const ctx = canvas.getContext("2d")
+
+        // setup width and height for canvas element
+        const width = canvas.width
+        const height = canvas.height
+
+        // work with blocks width and height
+        const blockSize = 10
+        const widthInBlocks = width / blockSize
+        const heightInBlocks = height / blockSize
+
+        // setup score to 0
+        let score = 0
+
+        // add playing logic variable for turn on/off gameloop
+        let playing = true
+
+
+        // speed variables
+        let animationSpeed = 100; // Initial animation speed
+        const minAnimationSpeed = 50; // Minimum animation speed
+        const maxAnimationSpeed = 200; // Maximum animation speed
+        const speedChangeAmount = 10; // Amount to change speed by
+
+
+        // draw borders
+        const drawBorder = function () {
+            ctx.fillStyle = "Gray"
+            ctx.fillRect(0, 0, width, blockSize)
+            ctx.fillRect(0, height - blockSize, width, blockSize)
+            ctx.fillRect(0, 0, blockSize, height)
+            ctx.fillRect(width - blockSize, 0, blockSize, height)
+        }
+
+        // draw score in the top left corner
+        const drawScore = function () {
+            ctx.textBaseline = "top"
+            ctx.textAlign = "left"
+            ctx.font = "20px Courier"
+            ctx.fillStyle = "Black"
+            ctx.fillText("Score: " + score, blockSize, blockSize)
+        }
+
+        // clear interval and print "Game over" text
+        const gameOver = function () {
+            playing = false
+            ctx.textAlign = "center"
+            ctx.textBaseline = "middle"
+            ctx.font = "60px Courier"
+            ctx.fillStyle = "Black"
+            ctx.fillText("Game over!", width / 2, height / 2)
+            $("body").off("keydown") // Stop listening to key events
+        }
+
+        // draw circle
+        const circle = function (x, y, radius, fillCircle) {
+            ctx.beginPath()
+            ctx.arc(x, y, radius, 0, Math.PI * 2, false)
+
+            if (fillCircle) ctx.fill()
+            else ctx.stroke()
+        }
+
+        // create Block constructor (for future snake and apple(s))
+        const Block = function (col, row) {
+            this.col = col
+            this.row = row
+        }
+
+        // draw square in the Block location
+        Block.prototype.drawSquare = function (color) {
+            let x = this.col * blockSize
+            let y = this.row * blockSize
+
+            ctx.fillStyle = color
+            ctx.fillRect(x, y, blockSize, blockSize)
+        }
+
+        // draw circle in the Block location
+        Block.prototype.drawCircle = function (color) {
+            let centerX = this.col * blockSize + blockSize / 2
+            let centerY = this.row * blockSize + blockSize / 2
+
+            ctx.fillStyle = color
+            circle(centerX, centerY, blockSize / 2, true)
+        }
+
+
+        // check that this Block is exist in one location with other Block
+        Block.prototype.equal = function (otherBlock) {
+            return this.col === otherBlock.col && this.row === otherBlock.row
+        }
+
+        // create Snake construstor
+        let Snake = function () {
+            this.segments = [
+                new Block(7, 5), // head
+                new Block(6, 5), // body
+                new Block(5, 5)  // tail
+            ]
+
+            this.direction = "right"
+            this.nextDirection = "right"
+
+            speedIncrement = 0; // Reset speed increment
+
+            // Add a method to speed up the snake
+            this.speedUp = function () {
+                speedIncrement++;
+                animationSpeed -= speedChangeAmount; // Increase animation speed
+            };
+        }
+
+        // draw snake segments (3 parts: head, body, tail)
+        Snake.prototype.draw = function () {
+            this.segments[0].drawSquare("LimeGreen")
+
+            for (let i = 1; i < this.segments.length; i++) {
+                this.segments[i].drawSquare("Blue")
+            }
+        }
+
+
+        // create new head and add it as beginning segment to snake
+        // for moving snake
+        Snake.prototype.move = function () {
+            let head = this.segments[0];
+            let newHead;
+
+            this.direction = this.nextDirection;
+
+            if (this.direction === "right")
+                newHead = new Block(head.col + 1, head.row)
+            else if (this.direction === "down")
+                newHead = new Block(head.col, head.row + 1)
+            else if (this.direction === "left")
+                newHead = new Block(head.col - 1, head.row)
+            else if (this.direction === "up")
+                newHead = new Block(head.col, head.row - 1)
+
+
+            if (this.checkCollision(newHead)) {
+                gameOver()
+                return
+            }
+
+            this.segments.unshift(newHead);
+
+            if (newHead.equal(apple.position)) {
+                score++
+                this.speedUp() // Speed up the snake
+                apple.move(this.segments)
+            } else {
+                this.segments.pop()
+            }
+        }
+
+
+        // Check that snake's head to face with wall or own body
+        Snake.prototype.checkCollision = function (head) {
+            let leftCollision = (head.col === 0)
+            let topCollision = (head.row === 0)
+            let rightCollision = (head.col === widthInBlocks - 1)
+            let bottomCollision = (head.row === heightInBlocks - 1)
+
+            let wallCollision = leftCollision || topCollision ||
+                rightCollision || bottomCollision
+
+            let selfCollision = false
+
+            for (let i = 0; i < this.segments.length; i++) {
+                if (head.equal(this.segments[i]))
+                    selfCollision = true
+            }
+
+            return wallCollision || selfCollision;
+        }
+
+
+        // set next direction for snake (keys on keyboard)
+        Snake.prototype.setDirection = function (newDirection) {
+            if (this.direction === "up" && newDirection === "down")
+                return
+            else if (this.direction === "right" && newDirection === "left")
+                return
+            else if (this.direction === "down" && newDirection === "up")
+                return
+            else if (this.direction === "left" && newDirection === "right")
+                return
+
+            this.nextDirection = newDirection
+        }
+
+        // create Apple construstor
+        let Apple = function () {
+            this.position = new Block(10, 10)
+            this.color = this.getRandomColor();
+        }
+
+        // Add a method to generate a random color
+        Apple.prototype.getRandomColor = function () {
+            const colors = ["Red", "Orange", "LimeGreen", "Blue", "Purple"];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        // draw circle in apple location with random color
+        Apple.prototype.draw = function () {
+            this.position.drawCircle(this.color);
+        }
+
+
+        // move apple in the random position
+        Apple.prototype.move = function (occupiedBlocks) {
+            let randomCol = Math.floor(Math.random() * (widthInBlocks - 2)) + 1
+            let randomRow = Math.floor(Math.random() * (heightInBlocks - 2)) + 1
+            this.position = new Block(randomCol, randomRow)
+            this.color = this.getRandomColor(); // Update the color when moved
+
+            // Check to see if apple has been moved to a block currently occupied by the snake
+            for (var i = 0; i < occupiedBlocks.length; i++) {
+                if (this.position.equal(occupiedBlocks[i])) {
+                    this.move(occupiedBlocks); // Call the move method again
+                    return;
+                }
+            }
+        }
+
+        // create objects for Snake and Apple
+        let snake = new Snake();
+        let apple = new Apple();
+
+
+        // add function for anination (setInterval)
+        let gameLoop = function () {
+            ctx.clearRect(0, 0, width, height)
+            drawScore()
+            snake.move()
+            snake.draw()
+            apple.draw()
+            drawBorder()
+
+            // set to falsefor gameover function
+            if (playing)
+                setTimeout(gameLoop, animationSpeed);
+        }
+
+        // start the game loop
+        gameLoop();
+
+
+        // covert key-codes to directions
+        // Hint for JS key-codes: https://www.toptal.com/developers/keycode
+        const direction = {
+            37: "left",
+            38: "up",
+            39: "right",
+            40: "down"
+        }
+
+        // add handler for control directions
+        // use keys on keyboard
+        $("body").keydown(function (event) {
+            let newDirection = direction[event.keyCode]
+            if (newDirection !== undefined)
+                snake.setDirection(newDirection)
+
+            // Speed control
+            if (event.key === "+") {
+                if (animationSpeed > minAnimationSpeed) {
+                    animationSpeed -= speedChangeAmount;
+                }
+            } else if (event.key === "-") {
+                if (animationSpeed < maxAnimationSpeed) {
+                    animationSpeed += speedChangeAmount;
+                }
+            }
+        });
+
+
+    </script>
+
+</body>
+
+</html>
